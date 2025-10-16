@@ -1,0 +1,6 @@
+playground
+.env
+__pycache__
+lightning_logs/
+*.ckpt
+wandb/

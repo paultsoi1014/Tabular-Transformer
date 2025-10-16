@@ -1,0 +1,5 @@
+python-dotenv==1.1.1
+pytorch-lightning==2.5.5
+scikit-learn==1.7.2
+pandas==2.3.3
+wandb==0.22.2

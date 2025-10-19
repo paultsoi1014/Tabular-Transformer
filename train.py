@@ -139,10 +139,11 @@ class TabularTransformerTrainer:
             n_continuous_features=len(self.config.data.continuous_features),
             n_heads=self.config.model.n_heads,
             n_layers=self.config.model.n_layers,
+            transformer_activation=self.config.model.transformer_activation,
             dim_feedforward=self.config.model.dim_feedforward,
             attn_dropout=self.config.model.dropout,
             mlp_hidden_dims=self.config.model.mlp_hidden_dims,
-            activation=self.config.model.activation,
+            mlp_activation=self.config.model.mlp_activation,
             ffn_dropout=self.config.model.dropout,
         )
 
@@ -236,38 +237,23 @@ class TabularTransformerTrainer:
 
     def fit(self):
         """Train the model"""
-        self.trainer.fit(self.model, self.datamodule)
-
-        if self.use_wandb:
-            wandb.finish()
-
-        return None
+        return self.trainer.fit(self.model, self.datamodule)
 
     def test(self):
         """
         Test the model on test dataset
         """
-        self.trainer.test(self.model, self.datamodule)
+        return self.trainer.test(self.model, self.datamodule)
 
-    def predict(self, datamodule: Optional[TabularDataModule] = None):
-        """
-        Make predictions using the trained model
-
-        Parameters
-        ----------
-        datamodule: Optional[TabularDataModule]
-            Data module for predictions. If None, uses the training datamodule
-
-        Returns
-        -------
-        Predictions from the model
-        """
-        if datamodule is None:
-            datamodule = self.datamodule
-
-        return self.trainer.predict(self.model, datamodule)
+    def cleanup(self):
+        """Clean up resources, including closing WandB run if active"""
+        if self.use_wandb and wandb.run is not None:
+            wandb.finish()
 
 
 if __name__ == "__main__":
     trainer = TabularTransformerTrainer()
     trainer.fit()
+    prediction = trainer.test()
+    print(prediction)
+    trainer.cleanup()

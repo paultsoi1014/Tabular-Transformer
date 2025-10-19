@@ -68,10 +68,11 @@ class ModelConfig:
     embedding_dim: int
     n_heads: int
     n_layers: int
+    transformer_activation: str
     dim_feedforward: int
     dropout: float
     mlp_hidden_dims: List[int]
-    activation: str
+    mlp_activation: str
 
     @classmethod
     def from_env(cls) -> "ModelConfig":
@@ -83,10 +84,11 @@ class ModelConfig:
             embedding_dim=int(os.getenv("EMBEDDING_DIM", 64)),
             n_heads=int(os.getenv("N_HEADS", 8)),
             n_layers=int(os.getenv("N_LAYERS", 3)),
+            transformer_activation=os.getenv("TRANSFORMER_ACTIVATION", "gelu"),
             dim_feedforward=int(os.getenv("DIM_FEEDFORWARD", 3)),
             dropout=float(os.getenv("DROPOUT", 0.01)),
             mlp_hidden_dims=mlp_hidden_dims,
-            activation=os.getenv("ACTIVATION", "gelu"),
+            mlp_activation=os.getenv("MLP_ACTIVATION", "gelu"),
         )
 
 

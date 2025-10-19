@@ -15,6 +15,7 @@ class CategoricalFeaturesEncoder(nn.Module):
         embedding_dim: int,
         n_heads: int,
         n_layers: int,
+        activation: str,
         dim_feedforward: int,
         dropout: float,
     ):
@@ -45,6 +46,8 @@ class CategoricalFeaturesEncoder(nn.Module):
             Number of attention heads in transformer layers
         n_layers: int
             Number of transformer encoder layers
+        activation: str
+            Activation function for transformer layers
         dim_feedforward: int
             Dimension of feedforward network in transformer layers
         dropout: float
@@ -59,7 +62,7 @@ class CategoricalFeaturesEncoder(nn.Module):
             nhead=n_heads,
             dim_feedforward=dim_feedforward,
             dropout=dropout,
-            activation="gelu",
+            activation=activation,
             batch_first=True,
             norm_first=True,
         )
@@ -259,10 +262,11 @@ class TabTransformer(nn.Module):
         n_continuous_features: int,
         n_heads: int,
         n_layers: int,
+        transformer_activation: str,
         dim_feedforward: int,
         attn_dropout: float,
         mlp_hidden_dims: List[int],
-        activation: str,
+        mlp_activation: str,
         ffn_dropout: float,
     ):
         """
@@ -292,13 +296,15 @@ class TabTransformer(nn.Module):
             Number of attention heads in transformer
         n_layers: int
             Number of transformer encoder layers
+        transformer_activation: str
+            Activation function for transformer layers
         dim_feedforward: int
             Dimension of feedforward network in transformer
         attn_dropout: float
             Dropout probability for attention layers
         mlp_hidden_dims: List[int]
             Hidden layer dimensions for MLP classifier
-        activation: str
+        mlp_activation: str
             Activation function for MLP
         ffn_dropout: float
             Dropout probability for feedforward layers
@@ -312,6 +318,7 @@ class TabTransformer(nn.Module):
                     embedding_dim=embedding_dim,
                     n_heads=n_heads,
                     n_layers=n_layers,
+                    activation=transformer_activation,
                     dim_feedforward=dim_feedforward,
                     dropout=attn_dropout,
                 ),
@@ -322,7 +329,7 @@ class TabTransformer(nn.Module):
             input_dim=embedding_dim * len(vocabulary) + n_continuous_features,
             output_dim=output_dim,
             hidden_dims=mlp_hidden_dims,
-            activation=activation,
+            activation=mlp_activation,
             dropout=ffn_dropout,
         )
 
@@ -390,6 +397,10 @@ class LightningTabTransformer(pl.LightningModule):
             Accumulated validation ground truth labels
         val_y_pred: List
             Accumulated validation predictions
+        test_y_true: List
+            Accumulated test ground truth labels
+        test_y_pred: List
+            Accumulated test predictions
         use_wandb: bool
             Whether to use Weights & Biases logging
 
@@ -428,6 +439,8 @@ class LightningTabTransformer(pl.LightningModule):
         self.validation_loss = []
         self.val_y_true = []
         self.val_y_pred = []
+        self.test_y_true = []
+        self.test_y_pred = []
         self.use_wandb = use_wandb
 
         self.save_hyperparameters(
@@ -571,6 +584,72 @@ class LightningTabTransformer(pl.LightningModule):
         self.val_y_pred = []
         self.training_loss = []
         self.validation_loss = []
+
+        return None
+
+    def test_step(
+        self, batch: Tuple[torch.Tensor, torch.Tensor, torch.Tensor], batch_idx: int
+    ) -> torch.Tensor:
+        """
+        Test step for a single batch
+
+        Parameters
+        ----------
+        batch: Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+            Batch containing (categorical_data, continuous_data, target)
+        batch_idx: int
+            Index of the current batch
+
+        Returns
+        -------
+        torch.Tensor
+            Test loss for the batch
+        """
+        categorical_data, continuous_data, target = batch
+
+        if self.output_dim == 1:
+            self.test_y_true.extend(target.cpu().numpy().reshape(-1).tolist())
+            target = target.unsqueeze(1)
+        else:
+            self.test_y_true.append(target.cpu().numpy())
+
+        output = self(categorical_data, continuous_data)
+
+        if self.output_dim == 1:
+            self.test_y_pred.extend(output.cpu().numpy().reshape(-1).tolist())
+        else:
+            self.test_y_pred.append(torch.argmax(output, dim=1).cpu().numpy())
+
+        loss = self.criterion(output, target)
+
+        self.log("test_loss", loss, prog_bar=True)
+
+        if self.use_wandb:
+            self.log("test/loss", loss, on_step=False, on_epoch=True)
+
+        return loss
+
+    def on_test_epoch_end(self) -> None:
+        """
+        Computes custom metric if provided and resets accumulated predictions
+        and ground truth at the end of the test epoch
+        """
+        if self.output_dim > 1:
+            y_true = np.concatenate(self.test_y_true)
+            y_pred = np.concatenate(self.test_y_pred)
+        else:
+            y_true = self.test_y_true
+            y_pred = self.test_y_pred
+
+        if self.custom_metric is not None:
+            test_metric = self.custom_metric(y_true, y_pred)
+            self.log("test_metric", test_metric, prog_bar=True)
+
+            if self.use_wandb:
+                self.log("test/custom_metric", test_metric)
+
+        self.test_y_true = []
+        self.test_y_pred = []
 
         return None
 

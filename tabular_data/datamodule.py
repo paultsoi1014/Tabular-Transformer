@@ -262,3 +262,195 @@ class TabularDataModule(pl.LightningDataModule):
             Test dataloader without shuffling
         """
         return DataLoader(self.test_dataset, batch_size=self.batch_size, shuffle=False)
+
+
+class TabularPredictDataModule(pl.LightningDataModule):
+    def __init__(
+        self,
+        df: pd.DataFrame,
+        vocabulary: Dict[str, Dict[str, int]],
+        batch_size: int,
+        output_dim: int,
+        categorical_features: List[str],
+        continuous_features: List[str],
+        target_name: str,
+    ):
+        """
+        PyTorch Lightning DataModule specifically designed for prediction. This
+        simplified DataModule is optimized for inference tasks
+
+        Attributes
+        ----------
+        df: pd.DataFrame
+            Input dataframe containing features for prediction
+        vocabulary: Dict[str, Dict[str, int]]
+            Pre-built vocabulary mappings for categorical features
+        batch_size: int
+            Batch size for prediction DataLoader
+        output_dim: int
+            Number of output dimensions
+        categorical_features: List[str]
+            List of categorical feature column names
+        continuous_features: List[str]
+            List of continuous feature column names
+        target_name: str
+            Name of target column
+        predict_dataset: TabularDataset
+            Dataset for prediction (created in setup())
+
+        Parameters
+        ----------
+        df: pd.DataFrame
+            Input dataframe containing features for prediction. Target column
+            is optional
+        vocabulary: Dict[str, Dict[str, int]]
+            Pre-built vocabulary mappings for categorical features from the
+            training data. Format: {feature_name: {feature_value: index}}
+        batch_size: int
+            Batch size for prediction DataLoader
+        output_dim: int
+            Number of output dimensions (1 for regression, >1 for classification)
+        categorical_features: Optional[List[str]]
+            List of categorical feature column names
+        continuous_features: Optional[List[str]]
+            List of continuous feature column names
+        target_name: str
+            Name of target column
+        """
+        super(TabularPredictDataModule, self).__init__()
+
+        self.df = df.copy()
+        self.vocabulary = vocabulary
+        self.batch_size = batch_size
+        self.output_dim = output_dim
+        self.categorical_features = categorical_features
+        self.continuous_features = continuous_features
+        self.target_name = target_name
+
+        # Validate features
+        self._validate_features()
+
+        # Validate categorical features
+        self._validate_categorical_features()
+
+        # Add dummy target column if not present
+        if self.target_name not in self.df.columns:
+            self.df[self.target_name] = 0
+
+    def _validate_features(self) -> None:
+        """Validate that all required features are present in the dataframe"""
+        features_required = self.categorical_features + self.continuous_features
+        missing_features = [
+            col for col in features_required if col not in self.df.columns
+        ]
+
+        if missing_features:
+            raise ValueError(
+                f"Missing required features in DataFrame: {missing_features}"
+            )
+
+        return None
+
+    def _validate_categorical_features(self) -> None:
+        """Validate that all categorical feature values are in the vocabulary"""
+        unknown_values = {}
+
+        for col in self.categorical_features:
+            unique_values = set(self.df[col].unique())
+            vocab_values = set(self.vocabulary[col].keys())
+            unknown = unique_values - vocab_values
+
+            if unknown:
+                unknown_values[col] = unknown
+
+        if unknown_values:
+            raise ValueError(
+                f"Unknown categorical feature values found: {unknown_values}"
+            )
+
+        return None
+
+    def setup(self, stage=None) -> None:
+        """
+        Prepare dataset for prediction
+
+        Parameters
+        ----------
+        stage: Optional[str]
+            Training stage ("fit", "validate", "test", "predict"). Unused in
+            this implementation. Default is None
+        """
+        self.predict_dataset = TabularDataset(
+            df=self.df,
+            target=self.target_name,
+            output_dim=self.output_dim,
+            categorical_features=self.categorical_features,
+            continuous_features=self.continuous_features,
+        )
+
+        return None
+
+    def predict_dataloader(self) -> DataLoader:
+        """
+        Get DataLoader for prediction
+
+        Returns
+        -------
+        DataLoader
+            Prediction dataloader without shuffling
+        """
+        return DataLoader(
+            self.predict_dataset,
+            batch_size=self.batch_size,
+            shuffle=False,
+            drop_last=False,
+        )
+
+    @classmethod
+    def from_csv(
+        cls,
+        file_path: str,
+        vocabulary: Dict[str, Dict[str, int]],
+        batch_size: int,
+        output_dim: int,
+        categorical_features: List[str],
+        continuous_features: List[str],
+        target_name: str,
+    ) -> "TabularPredictDataModule":
+        """
+        Create TabularPredictDataModule from a CSV file
+
+        Parameters
+        ----------
+        file_path: str
+            Path to the CSV file containing data for prediction
+        vocabulary: Dict[str, Dict[str, int]]
+            Pre-built vocabulary mappings for categorical features from the
+            training data. Format: {feature_name: {feature_value: index}}
+        batch_size: int
+            Batch size for prediction DataLoader
+        output_dim: int
+            Number of output dimensions (1 for regression, >1 for classification)
+        categorical_features: List[str]
+            List of categorical feature column names
+        continuous_features: List[str]
+            List of continuous feature column names
+        target_name: str
+            Name of target column
+
+        Returns
+        -------
+        TabularPredictDataModule
+            Configured TabularPredictDataModule instance
+        """
+        df = pd.read_csv(file_path)
+
+        return cls(
+            df=df,
+            vocabulary=vocabulary,
+            batch_size=batch_size,
+            output_dim=output_dim,
+            categorical_features=categorical_features,
+            continuous_features=continuous_features,
+            target_name=target_name,
+        )

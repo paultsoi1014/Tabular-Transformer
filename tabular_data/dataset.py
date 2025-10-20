@@ -1,8 +1,10 @@
 import pandas as pd
-from typing import Dict, List, Tuple, Optional
+from typing import List, Tuple, Optional
 
 import torch
 from torch.utils.data import Dataset
+
+from .utils import build_vocabulary
 
 
 class TabularDataset(Dataset):
@@ -85,7 +87,7 @@ class TabularDataset(Dataset):
             self.continuous_data = None
 
         # Build vocabulary
-        self.vocabulary = self._build_vocabulary(df, categorical_features)
+        self.vocabulary = build_vocabulary(df, categorical_features)
 
         # Set target
         self.target = torch.tensor(df[target].to_numpy(), dtype=self.target_dtype)
@@ -161,37 +163,6 @@ class TabularDataset(Dataset):
             )
 
         return None
-
-    def _build_vocabulary(
-        self, df: pd.DataFrame, categorical_features: Optional[List[str]] = None
-    ) -> Dict[str, Dict[str, int]]:
-        """
-        Build vocabulary mappings for categorical features
-
-        Parameters
-        ----------
-        df: pd.DataFrame
-            Input dataframe
-        categorical_features: Optional[List[str]]
-            List of categorical feature column names
-
-        Returns
-        -------
-        Dict[str, Dict[str, int]]
-            Dictionary mapping each categorical feature to its value-to-index
-            mapping
-        """
-        vocabulary = {}
-
-        if categorical_features is None:
-            return vocabulary
-
-        # Check feature existance
-        for col in categorical_features:
-            unique_values = sorted(df[col].unique().tolist())
-            vocabulary[col] = {value: i for i, value in enumerate(unique_values)}
-
-        return vocabulary
 
     def get_vocabulary(self) -> dict:
         """

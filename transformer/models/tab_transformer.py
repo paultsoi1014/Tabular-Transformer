@@ -363,9 +363,11 @@ class LightningTabTransformer(pl.LightningModule):
     def __init__(
         self,
         model: TabTransformer,
-        output_dim: int,
-        criterion: nn.Module,
-        optimizer: torch.optim.Optimizer,
+        inference: Optional[bool] = False,
+        *,
+        output_dim: Optional[int] = None,
+        criterion: Optional[nn.Module] = None,
+        optimizer: Optional[torch.optim.Optimizer] = None,
         scheduler: Optional[torch.optim.lr_scheduler._LRScheduler] = None,
         custom_metric: Optional[Callable] = None,
         scheduler_custom_metric: Optional[bool] = False,
@@ -415,7 +417,7 @@ class LightningTabTransformer(pl.LightningModule):
         optimizer: torch.optim.Optimizer
             Optimizer instance (not class)
         scheduler: Optional[torch.optim.lr_scheduler._LRScheduler]
-            Learning rate scheduler. Default is None
+            Learning rate scheduler
         custom_metric: Optional[Callable]
             Custom evaluation metric function that takes (y_true, y_pred) and
             returns a scalar. Default is None
@@ -426,6 +428,13 @@ class LightningTabTransformer(pl.LightningModule):
             If True, enable Weights & Biases logging. Default is False
         """
         super(LightningTabTransformer, self).__init__()
+
+        if not inference:
+            if output_dim is None or criterion is None or optimizer is None:
+                raise ValueError(
+                    "output_dim, criterion, and optimizer must be provided "
+                    "when inference is False"
+                )
 
         self.model = model
         self.output_dim = output_dim
